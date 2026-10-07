@@ -25,6 +25,6 @@ jobs:
         run: npm test
 
       - name: Run Snyk dependency scan
-        uses: snyk/actions/node@1
+        uses: snyk/actions/node@master
         with:
           command: test
