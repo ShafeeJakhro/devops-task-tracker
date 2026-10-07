@@ -28,3 +28,5 @@ jobs:
         uses: snyk/actions/node@master
         with:
           command: test
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
