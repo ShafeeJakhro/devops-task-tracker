@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Successful CI workflow run ID'
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ inputs.run_id }}
+
+    steps:
+      - name: Verify CI workflow run
+        run: |
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || exit 1
+
+          RUN=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID")
+
+          echo "$RUN" | jq -e '
+            .conclusion == "success" and
+            .head_branch == "main" and
+            .event == "push" and
+            .path == ".github/workflows/ci.yml"
+          ' > /dev/null
+
+          SHA=$(echo "$RUN" | jq -r '.head_sha')
+
+          echo "BUILD_SHA=$SHA" >> "$GITHUB_ENV"
+          echo "Verified CI commit: $SHA"
+
+      - name: Download existing CI artifact
+        run: |
+          mkdir -p release-assets
+
+          gh run download "$RUN_ID" \
+            --name "devops-task-tracker-${BUILD_SHA}" \
+            --dir release-assets
+
+      - name: Verify deployment package
+        run: |
+          cd release-assets
+
+          test -f "devops-task-tracker-${BUILD_SHA}.tar.gz"
+          test -f SHA256SUMS
+          test -f RELEASE_NOTES.md
+
+          grep -Fx -- "- Commit SHA: $BUILD_SHA" RELEASE_NOTES.md
+
+          sha256sum -c SHA256SUMS
+
+          ls -lh
