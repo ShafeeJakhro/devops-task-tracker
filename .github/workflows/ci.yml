@@ -13,6 +13,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Inspect CI workspace
+        run: |
+          echo "GitHub workspace: $GITHUB_WORKSPACE"
+          echo "Current working directory:"
+          pwd
+          echo "Workspace files:"
+          ls -la
+          echo "Runner temporary directory: $RUNNER_TEMP"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
