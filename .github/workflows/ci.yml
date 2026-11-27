@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Inspect CI workspace
         run: |
@@ -39,7 +41,7 @@ jobs:
           command: test
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      
+
       - name: Run Snyk Code scan
         uses: snyk/actions/node@master
         with:
@@ -66,6 +68,37 @@ jobs:
 
           ls -lh
 
+      - name: Generate release notes
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null || true)
+
+          {
+            echo "# Release Notes"
+            echo ""
+            echo "- Application Version: $VERSION"
+            echo "- Commit SHA: $GITHUB_SHA"
+            echo "- Build Number: $GITHUB_RUN_NUMBER"
+            echo "- Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo ""
+            echo "## Changes"
+            echo ""
+
+            if [ -n "$PREVIOUS_TAG" ]; then
+              echo "Changes since $PREVIOUS_TAG:"
+              echo ""
+              git log "$PREVIOUS_TAG"..HEAD --pretty=format:"- %h %s"
+            else
+              echo "Initial release - complete commit history:"
+              echo ""
+              git log HEAD --pretty=format:"- %h %s"
+            fi
+
+            echo ""
+          } > artifacts/RELEASE_NOTES.md
+
+          cat artifacts/RELEASE_NOTES.md
+
       - name: Upload deployment artifact
         uses: actions/upload-artifact@v7
         with:
@@ -73,5 +106,3 @@ jobs:
           path: artifacts/
           retention-days: 30
           if-no-files-found: error
-
-
