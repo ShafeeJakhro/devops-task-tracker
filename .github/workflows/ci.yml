@@ -47,4 +47,31 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
+      - name: Prepare production dependencies
+        run: npm prune --omit=dev
+
+      - name: Generate deployment artifact
+        run: |
+          mkdir -p artifacts
+
+          tar -czf "artifacts/devops-task-tracker-${GITHUB_SHA}.tar.gz" \
+            app.js \
+            server.js \
+            package.json \
+            package-lock.json \
+            node_modules
+
+          cd artifacts
+          sha256sum *.tar.gz > SHA256SUMS
+
+          ls -lh
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: devops-task-tracker-${{ github.sha }}
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: error
+
 
