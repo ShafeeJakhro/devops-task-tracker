@@ -1,3 +1,4 @@
+
 name: Release
 
 on:
@@ -8,9 +9,18 @@ on:
         required: true
         type: string
 
+      release_version:
+        description: 'Release version (e.g. v1.0.1)'
+        required: true
+        type: string
+
 permissions:
   actions: read
-  contents: read
+  contents: write
+
+concurrency:
+  group: release-publishing
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -20,6 +30,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RUN_ID: ${{ inputs.run_id }}
+      RELEASE_VERSION: ${{ inputs.release_version }}
 
     steps:
       - name: Verify CI workflow run
@@ -61,3 +72,44 @@ jobs:
           sha256sum -c SHA256SUMS
 
           ls -lh
+
+      - name: Validate release version
+        run: |
+          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Invalid release version"
+            exit 1
+          }
+
+          VERSION=$(tar -xOzf \
+            "release-assets/devops-task-tracker-${BUILD_SHA}.tar.gz" \
+            package.json | jq -er '.version')
+
+          if [ "$RELEASE_VERSION" != "v$VERSION" ]; then
+            echo "Release version does not match application version"
+            exit 1
+          fi
+
+          TAGS=$(gh api --paginate \
+            "repos/$GH_REPO/git/matching-refs/tags/$RELEASE_VERSION" \
+            --jq '.[].ref')
+
+          if grep -Fxq "refs/tags/$RELEASE_VERSION" <<< "$TAGS"; then
+            echo "Release tag already exists. Stopping."
+            exit 1
+          fi
+
+      - name: Publish GitHub pre-release
+        run: |
+          gh release create "$RELEASE_VERSION" \
+            "release-assets/devops-task-tracker-${BUILD_SHA}.tar.gz" \
+            release-assets/SHA256SUMS \
+            release-assets/RELEASE_NOTES.md \
+            --target "$BUILD_SHA" \
+            --title "$RELEASE_VERSION - Automated CI/CD Release" \
+            --notes-file release-assets/RELEASE_NOTES.md \
+            --prerelease
+
+      - name: Verify published release
+        run: |
+          gh release view "$RELEASE_VERSION" \
+            --json tagName,isPrerelease,url,assets
